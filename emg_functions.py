@@ -20,6 +20,12 @@ from features import *
 # SERIAL_PORT = 'COM7'
 # BAUD_RATE = 115200
 
+def check_filename_contains(file, condition):
+    if condition in file:
+        return True
+    else:
+        return False
+
 def load_dataset(path, file_conditions=None):
     """
     Load files in a directory with or without condition on the name of the file.
@@ -141,10 +147,17 @@ def data_preparation(list_data):
     
 def extract_window_features(window_data, features, channel_columns, label_column='Gesture'):
     feature_vector = [feature(window_data[channel].values) for channel in channel_columns for feature in features]
+    label = window_data[label_column].values[0]
 
-    return (feature_vector, window_data[label_column].values[0])
+    return (feature_vector, label)
     
 def extract_features_and_labels(data, features, label_column='Gesture', window=200, step_size=50):
+    """
+    Extract features and labels from data
+    Returns a set of array of features and array of labels
+    data : DataFrame
+    features : list of string
+    """
     channels = pd.DataFrame()
     for col in data.columns:
         if "Channel" in col:
@@ -176,25 +189,45 @@ def data_split(dict_data, specific_split=False, test_files=None, split_ratio=0.8
             train_data = [data for key, data in dict_data.items() if key not in test_files]
     else: 
         data_list = [data for key, data in dict_data.items()]
-        train_data, test_data = train_test_split(data_list, split_ratio)
+        train_data, test_data = train_test_split(data_list, test_size=1-split_ratio)
 
     return train_data, test_data
 
-def import_model(path, name):
+def import_model(dir, name):
     """
-    Load a trained model from disk.
+    Load a trained model from dir.
     """
-    model_path = os.path.join(path, name)
+    os.makedirs(dir, exist_ok=True)
+    model_path = os.path.join(dir, name)
     model = joblib.load(model_path)
     return model
 
-def import_scaler(path, name):
+def import_scaler(dir, name):
     """
-    Load a fitted scaler from disk.
+    Load a fitted scaler from dir.
     """
-    scaler_path = os.path.join(path, name)
+    os.makedirs(dir, exist_ok=True)
+    scaler_path = os.path.join(dir, name)
     scaler = joblib.load(scaler_path)
     return scaler
+
+def save_model(model, dir, name):
+    """
+    Save a trained model to dir.
+    """
+    os.makedirs(dir, exist_ok=True)
+    name = f"{name}.pkl"
+    model_path = os.path.join(dir, name)
+    joblib.dump(model, model_path)
+
+def save_scaler(scaler, dir, name):
+    """
+    Save a fitted scaler to dir.
+    """
+    os.makedirs(dir, exist_ok=True)
+    name = f"{name}.pkl"
+    scaler_path = os.path.join(dir, name)
+    joblib.dump(scaler, scaler_path)
     
 def train_model(training_features, training_labels, fast_training=True, params=None):
     if fast_training:

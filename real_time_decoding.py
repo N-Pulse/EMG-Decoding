@@ -25,16 +25,24 @@ if __name__ == "__main__":
         "--model_dir",
         type=Path,
         help="Path to the model directory where the model is stored.",
+        default=models
     )
     parser.add_argument(
         "--result_dir",
         type=Path,
         help="Path to the result directory where all plots will be stored.",
+        default=results
     )
     parser.add_argument(
-        "--test_files",
+        "--test_data_files",
         type=str,
         help="Names of the testing files in data_dir.",
+    )
+    parser.add_argument(
+        "--model_file_ext",
+        type=str,
+        help="Extension of the model/scaler file name in model_dir.",
+        default=""
     )
     parser.add_argument(
         "--online",
@@ -61,6 +69,12 @@ if __name__ == "__main__":
         default=100
     )
     parser.add_argument(
+        "--sampling_freq",
+        type=int,
+        help="Sampling frequency (per channel).",
+        default=1000
+    )
+    parser.add_argument(
         "--port",
         type=str,
         help="Port connected in serial.",
@@ -75,7 +89,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     nb_channels = args.nb_channels
-    port = args.port
+    # port = args.port
 
     # # I2C setup
     # i2c = busio.I2C(board.SCL, board.SDA)   # I2C interface initialisation
@@ -106,25 +120,29 @@ if __name__ == "__main__":
 
     file_conditions=args.file_conditions
     # file_conditions="_5_"
-    test_files = args.test_files
+    test_data_files = args.test_data_files
     # test_files = ["WS_R_5_250509100145.csv"]
     window_size = args.window_size
     # window_size=200
     step_size = args.step_size
     # step_size=100
-    fs = 1000 # Sampling frequency
+    fs = args.sampling_freq
+    # fs = 1000 
 
     features = [wl, wamp, var, rms]
 
-       
-
     if args.online == True:
         # Online EMG decoding
-
         if (model_dir is not None) and (scaler_dir is not None):
+            ext = args.model_file_ext
+            model_files = [file for file in model_dir if f"model{ext}" in file]
+            scaler_files =  [file for file in model_dir if f"scaler{ext}" in file]
+            # Choose the first 
+            model_name = model_files[0]
+            scaler_name = scaler_files[0]
             # Import existing model and scaler
-            scaler = import_scaler(model_dir, )
-            model = import_model(scaler_dir, )
+            scaler = import_scaler(model_dir, model_name)
+            model = import_model(scaler_dir, scaler_name)
         else:
             # Train model
             dict_data = load_dataset(data_dir, file_conditions=file_conditions)
@@ -137,6 +155,14 @@ if __name__ == "__main__":
             training_features = scaler.fit_transform(training_features)
 
             model = train_model(training_features, training_labels, fast_training=True)
+
+            nb_dof = len(np.unique(training_labels))
+            nb_feat = len(features)
+            ext = f"ch{nb_channels}_dof{nb_dof}_window{window_size}_step{step_size}_feat{nb_feat}"
+            model_name = f"model_{ext}"
+            scaler_name = f"scaler_{ext}"
+            save_model(model, model_dir, model_name)
+            save_scaler(scaler, model_dir, scaler_name)
 
         channels_scaler = measure_resting_state(channels, duration=5)
 
@@ -157,7 +183,7 @@ if __name__ == "__main__":
         # Offline EMG decoding
         dict_data = load_dataset(data_dir, file_conditions=file_conditions)
 
-        train_data, test_data = data_split(dict_data, specific_split=True, test_files=test_files) 
+        train_data, test_data = data_split(dict_data, specific_split=True, test_files=test_data_files) 
 
         training_features, training_labels = extract_features_and_labels(train_data, features, window=window_size, step_size=step_size)
         testing_features, testing_labels = extract_features_and_labels(test_data, features, window=window_size, step_size=step_size)
@@ -177,5 +203,5 @@ if __name__ == "__main__":
         #     window_size=window_size, 
         #     step_size=step_size)
         metrics = ["accuracy", "recall", "precision", "f1-score"]
-        labels = ["Rest", "Fist"]
-        show_results(predicted_labels, true_labels=testing_labels, metrics=metrics, labels=None)
+        labels = [i.astype('str') for i in np.unique(testing_labels)]
+        show_results(predicted_labels, true_labels=testing_labels, metrics=metrics, labels=labels)
